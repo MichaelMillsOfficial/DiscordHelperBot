@@ -3,6 +3,10 @@ dotenv.config();
 
 const { prefix, token } = require("./config.json");
 
+const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const FORMATTED_GAME_NAMES = require("./gamenames.json");
+
 const Discord = require('discord.js');
 const client = new Discord.Client();
 
@@ -33,6 +37,13 @@ client.on('message', message => {
                 message.reply(`I need the name of the role to create!`);
                 break;
             }
+
+            // CHECK IF THE REQUESTING USER HAS ACCESS
+            if(!message.member.roles.cache.some(r => r.name === "Admin") && !message.member.roles.cache.some(r => r.name === "Mod")) {
+                message.reply(`Apologies, I can only service admins and moderators.`);
+                break;
+            }
+
             var roleManager = message.guild.roles;
             // Check if a role already exists
             var isDupe = false;
@@ -61,9 +72,29 @@ client.on('message', message => {
 
             break;
         case "game-reminder": 
-            if (!args.length || args.length != 2) {
+            if (!args.length || args.length < 2) {
                 message.reply(`I need the name of a role first, followed by the name of the game!`);
                 break;
+            }
+
+            var gameReminderDateString;
+
+            if(args.length == 3) {
+                // Handle a date passed in! Format can be mmddHHmm, mmddHH, [dayofweek0-6]HHmm, or [dayofweek0-6]HH
+                var gameDate = args[2];
+                if(gameDate.length == 6) {
+                    var dateData = extractDateComponentsMonthDay(gameDate);
+                    gameReminderDateString = ` on ${dateData.month} ${dateData.day}, at ${dateData.hour} o'clock`;
+                } else if(gameDate.length == 8) {
+                    var dateData = extractDateComponentsMonthDay(gameDate);
+                    gameReminderDateString = ` on ${dateData.month} ${dateData.day}, at ${dateData.hour}:${dateData.minute}`;
+                } else if(gameDate.length == 5) {
+                    var dateData = extractDateComponentsDayOfWeek(gameDate);
+                    gameReminderDateString = ` on ${dateData.dayofweekName}, at ${dateData.hour}:${dateData.minute}`;
+                } else if(gameDate.length == 3) {
+                    var dateData = extractDateComponentsDayOfWeek(gameDate);
+                    gameReminderDateString = ` on ${dateData.dayofweekName}, at ${dateData.hour} o'clock`;
+                }
             }
 
             // Try to find the role!
@@ -72,7 +103,17 @@ client.on('message', message => {
                 roles.cache.forEach(role => {
                     if (role.name === args[0]) {
                         // Ladies and gentlemen, we got em
-                        message.channel.send(`<@&${role.id}>, ${message.author} would like to play ${args[1]}! Please react using an emoji to determine if you are interested!`).then(botMessage => {
+                        // Construct str
+                        var gameName = args[1];
+                        if(FORMATTED_GAME_NAMES.hasOwnProperty(args[1])) {
+                            gameName = FORMATTED_GAME_NAMES[gameName];
+                        }
+                        var reminderMessage = `<@&${role.id}>, ${message.author} would like to play ${gameName}`;
+                        if(gameReminderDateString) {
+                            reminderMessage += gameReminderDateString;
+                        }
+                        reminderMessage += `! Please react using an emoji to show if you are interested!`; 
+                        message.channel.send(reminderMessage).then(botMessage => {
                             botMessage.react("✅").then(() => botMessage.react("❌")).then(() => botMessage.react("🤔"));
                         })
                     }
@@ -83,5 +124,37 @@ client.on('message', message => {
         default:
             console.log(`I don't understand the command ${command}!`);
 
+    }
+
+    function extractDateComponentsMonthDay(input) {
+        var month = Number.parseInt(input.substr(0,2));
+        var monthName = months[month - 1]; // Use month - 1 to make it 0 index friendly
+        var day = Number.parseInt(input.substr(2,2));
+        var hour = Number.parseInt(input.substr(4,2));
+        var minute = undefined;
+        if(input.length == 8) {
+            minute = Number.parseInt(input.substr(6,2));
+        }
+        return {
+            month: monthName,
+            day: day,
+            hour: hour,
+            minute: minute
+        }
+    }
+
+    function extractDateComponentsDayOfWeek(input) {
+        var dayofweek = Number.parseInt(input.substr(0,1));
+        var dayofweekName = days[dayofweek];
+        var hour = Number.parseInt(input.substr(1,2));
+        var minute = undefined;
+        if(input.length == 5) {
+            minute = Number.parseInt(input.substr(3,2));
+        }
+        return {
+            dayofweekName: dayofweekName,
+            hour: hour,
+            minute: minute
+        }
     }
 });
